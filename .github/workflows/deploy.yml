@@ -1,0 +1,43 @@
+name: Deploy nginx config
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/nginx/nginx.conf'
+      - '.github/workflows/deploy-nginx.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: SSH and reload nginx
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host:       ${{ vars.SSH_HOST }}
+          username:   ${{ vars.SSH_USER }}
+          port:       ${{ vars.SSH_PORT }}
+          key:        ${{ secrets.SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+
+            echo "==> Pulling latest changes"
+            cd "${{ vars.REPO_PATH }}"
+            git fetch --prune
+            git reset --hard origin/${{ vars.REPO_BRANCH }}
+
+            echo "==> Installing nginx.conf"
+            sudo cp src/nginx/nginx.conf /etc/nginx/nginx.conf
+
+            echo "==> Testing nginx config"
+            sudo nginx -t
+
+            echo "==> Reloading nginx"
+            sudo systemctl reload nginx
+
+            echo "==> Done"
